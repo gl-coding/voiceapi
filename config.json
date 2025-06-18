@@ -1,0 +1,42 @@
+{
+    "text_files": [
+        {
+            "file_path": "D:\\data\\jianying\\content.txt",
+            "textarea_index": 0,
+            "description": "第一个textarea"
+        },
+        {
+            "file_path": "D:\\data\\jianying\\qinghuanv.txt",
+            "textarea_index": 2,
+            "description": "第三个textarea"
+        }
+    ],
+    "audio_files": [
+        {
+            "file_path": "D:\\data\\jianying\\qinghuanv.wav",
+            "upload_selector": ".svelte-b0hvie",
+            "description": "qinghuanv音频文件"
+        }
+    ],
+    "selectors": {
+        "textarea": "textarea.scroll-hide.svelte-1f354aw",
+        "button": "button.lg.secondary.svelte-cmf5ev"
+    },
+    "url": "http://127.0.0.1:50004/",
+    "temp_directory": "D:\\wsl_space\\CosyVoice_V2\\CosyVoice_V2\\TEMP\\Gradio",
+    "browser": {
+        "headless": true,
+        "window_size": "1920,1080"
+    },
+    "monitoring": {
+        "enabled": true,
+        "check_interval": 60,
+        "max_wait_time": 600
+    },
+    "timeouts": {
+        "page_load": 3,
+        "element_wait": 10,
+        "button_interval": 2,
+        "observe_time": 15
+    }
+} 
