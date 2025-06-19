@@ -1,19 +1,19 @@
 {
     "text_files": [
         {
-            "file_path": "D:\\data\\jianying\\content.txt",
+            "file_path": "",
             "textarea_index": 0,
             "description": "第一个textarea"
         },
         {
-            "file_path": "D:\\data\\jianying\\qinghuanv.txt",
+            "file_path": "",
             "textarea_index": 2,
             "description": "第三个textarea"
         }
     ],
     "audio_files": [
         {
-            "file_path": "D:\\data\\jianying\\qinghuanv.wav",
+            "file_path": "",
             "upload_selector": ".svelte-b0hvie",
             "description": "qinghuanv音频文件"
         }
@@ -23,9 +23,9 @@
         "button": "button.lg.secondary.svelte-cmf5ev"
     },
     "url": "http://127.0.0.1:50004/",
-    "temp_directory": "D:\\wsl_space\\CosyVoice_V2\\CosyVoice_V2\\TEMP\\Gradio",
+    "temp_directory": "",
     "browser": {
-        "headless": false,
+        "headless": true,
         "window_size": "1920,1080"
     },
     "output": {

@@ -1,0 +1,19 @@
+# Linux文件路径配置文件示例
+# 每行一个路径，格式：配置键=文件路径
+# 复制此文件为paths.txt并修改路径即可使用
+
+# 文本文件路径
+text_file_1=/home/ayn/work/jianying/content.txt
+text_file_2=/home/ayn/work/jianying/qinghuanv.txt
+
+# 音频文件路径
+audio_file_1=/home/ayn/work/jianying/qinghuanv.wav
+
+# 临时目录路径
+temp_directory=/home/ayn/work/CosyVoice_V2/CosyVoice_V2/TEMP/Gradio
+
+# 其他可能的Linux路径示例
+# text_file_1=/mnt/data/jianying/content.txt
+# text_file_2=/mnt/data/jianying/qinghuanv.txt
+# audio_file_1=/mnt/data/jianying/qinghuanv.wav
+# temp_directory=/tmp/CosyVoice_V2/TEMP/Gradio 

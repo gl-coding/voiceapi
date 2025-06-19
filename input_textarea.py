@@ -23,6 +23,54 @@ from datetime import datetime
 # 全局时间戳记录字典
 timestamps = {}
 
+def load_paths_from_file(paths_file="paths.txt"):
+    """
+    从paths.txt文件加载文件路径配置
+    
+    Args:
+        paths_file: 路径配置文件路径
+    
+    Returns:
+        路径配置字典
+    """
+    paths = {}
+    try:
+        if not os.path.exists(paths_file):
+            print(f"路径配置文件不存在: {paths_file}")
+            return paths
+        
+        with open(paths_file, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                
+                # 跳过空行和注释行
+                if not line or line.startswith('#'):
+                    continue
+                
+                # 解析键值对
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    # 移除可能的引号
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    
+                    paths[key] = value
+                else:
+                    print(f"警告：第{line_num}行格式错误，跳过: {line}")
+        
+        print(f"✓ 成功加载路径配置: {paths_file}")
+        print(f"加载的路径配置: {paths}")
+        return paths
+        
+    except Exception as e:
+        print(f"✗ 读取路径配置文件失败: {e}")
+        return paths
+
 def record_timestamp(stage_name):
     """
     记录阶段时间戳
@@ -934,7 +982,22 @@ def main():
     # 加载配置文件
     config = load_config()
     if not config:
-        print("无法加载配置文件，程序退出")
+        print("\n" + "="*60)
+        print("程序启动失败！")
+        print("="*60)
+        print("可能的原因：")
+        print("1. paths.txt文件不存在")
+        print("2. paths.txt中缺少必要的路径配置")
+        print("3. config.json文件格式错误")
+        print("\n解决方案：")
+        print("1. 确保paths.txt文件存在")
+        print("2. 检查paths.txt是否包含以下必要配置：")
+        print("   - text_file_1")
+        print("   - text_file_2") 
+        print("   - audio_file_1")
+        print("   - temp_directory")
+        print("3. 参考paths_linux.txt文件中的示例格式")
+        print("="*60)
         return
     
     # 记录配置加载完成时间戳
@@ -1010,7 +1073,7 @@ def main():
 
 def load_config(config_file="config.json"):
     """
-    从config.json文件加载配置
+    从config.json文件加载配置，并使用paths.txt中的路径
     
     Args:
         config_file: 配置文件路径
@@ -1028,6 +1091,49 @@ def load_config(config_file="config.json"):
             config = json.load(f)
         
         print(f"✓ 成功加载配置文件: {config_file}")
+        
+        # 加载路径配置
+        paths = load_paths_from_file()
+        
+        # 验证必要的路径配置
+        required_paths = ["text_file_1", "text_file_2", "audio_file_1", "temp_directory"]
+        missing_paths = []
+        
+        for path_key in required_paths:
+            if path_key not in paths or not paths[path_key].strip():
+                missing_paths.append(path_key)
+        
+        if missing_paths:
+            print(f"\n✗ 错误：paths.txt中缺少以下必要路径配置：")
+            for path_key in missing_paths:
+                print(f"  - {path_key}")
+            print(f"\n请检查paths.txt文件，确保包含所有必要的路径配置。")
+            print(f"参考paths_linux.txt文件中的示例格式。")
+            return None
+        
+        # 如果路径配置存在，替换配置文件中的路径
+        if paths:
+            print("正在使用paths.txt中的路径替换配置文件路径...")
+            
+            # 替换文本文件路径
+            if "text_file_1" in paths and len(config.get("text_files", [])) > 0:
+                config["text_files"][0]["file_path"] = paths["text_file_1"]
+                print(f"  文本文件1路径: {paths['text_file_1']}")
+            
+            if "text_file_2" in paths and len(config.get("text_files", [])) > 1:
+                config["text_files"][1]["file_path"] = paths["text_file_2"]
+                print(f"  文本文件2路径: {paths['text_file_2']}")
+            
+            # 替换音频文件路径
+            if "audio_file_1" in paths and len(config.get("audio_files", [])) > 0:
+                config["audio_files"][0]["file_path"] = paths["audio_file_1"]
+                print(f"  音频文件1路径: {paths['audio_file_1']}")
+            
+            # 替换临时目录路径
+            if "temp_directory" in paths:
+                config["temp_directory"] = paths["temp_directory"]
+                print(f"  临时目录路径: {paths['temp_directory']}")
+        
         return config
         
     except json.JSONDecodeError as e:
@@ -1048,19 +1154,19 @@ def create_default_config(config_file="config.json"):
     default_config = {
         "text_files": [
             {
-                "file_path": r"D:\data\jianying\content.txt",
+                "file_path": "",
                 "textarea_index": 0,
                 "description": "第一个textarea"
             },
             {
-                "file_path": r"D:\data\jianying\qinghuanv.txt",
+                "file_path": "",
                 "textarea_index": 2,
                 "description": "第三个textarea"
             }
         ],
         "audio_files": [
             {
-                "file_path": r"D:\data\jianying\qinghuanv.wav",
+                "file_path": "",
                 "upload_selector": ".svelte-b0hvie",
                 "description": "qinghuanv音频文件"
             }
@@ -1070,7 +1176,7 @@ def create_default_config(config_file="config.json"):
             "button": "button.lg.secondary.svelte-cmf5ev"
         },
         "url": "http://127.0.0.1:50004/",
-        "temp_directory": r"D:\wsl_space\CosyVoice_V2\CosyVoice_V2\TEMP\Gradio",
+        "temp_directory": "",
         "browser": {
             "headless": False,
             "window_size": "1920,1080"
@@ -1098,7 +1204,8 @@ def create_default_config(config_file="config.json"):
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(default_config, f, indent=4, ensure_ascii=False)
         print(f"✓ 已创建默认配置文件: {config_file}")
-        print("请根据实际情况修改配置文件中的路径和选择器")
+        print("请创建paths.txt文件并配置必要的文件路径")
+        print("参考paths_linux.txt文件中的示例格式")
     except Exception as e:
         print(f"✗ 创建配置文件失败: {e}")
 
