@@ -25,8 +25,14 @@
     "url": "http://127.0.0.1:50004/",
     "temp_directory": "D:\\wsl_space\\CosyVoice_V2\\CosyVoice_V2\\TEMP\\Gradio",
     "browser": {
-        "headless": true,
+        "headless": false,
         "window_size": "1920,1080"
+    },
+    "output": {
+        "directory": "data",
+        "filename": "output_audio.wav",
+        "wait_before_close": 5,
+        "auto_close": true
     },
     "monitoring": {
         "enabled": true,

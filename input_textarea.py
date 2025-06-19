@@ -18,6 +18,98 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import os
+from datetime import datetime
+
+# 全局时间戳记录字典
+timestamps = {}
+
+def record_timestamp(stage_name):
+    """
+    记录阶段时间戳
+    
+    Args:
+        stage_name: 阶段名称
+    """
+    timestamps[stage_name] = {
+        'timestamp': datetime.now(),
+        'time_str': datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+    }
+    print(f"[{timestamps[stage_name]['time_str']}] 阶段: {stage_name}")
+
+def calculate_duration(start_stage, end_stage):
+    """
+    计算两个阶段之间的耗时
+    
+    Args:
+        start_stage: 开始阶段名称
+        end_stage: 结束阶段名称
+    
+    Returns:
+        耗时（秒）
+    """
+    if start_stage in timestamps and end_stage in timestamps:
+        start_time = timestamps[start_stage]['timestamp']
+        end_time = timestamps[end_stage]['timestamp']
+        duration = (end_time - start_time).total_seconds()
+        return duration
+    return 0
+
+def print_timing_summary():
+    """
+    打印时间统计摘要
+    """
+    print(f"\n{'='*60}")
+    print("时间统计摘要")
+    print(f"{'='*60}")
+    
+    # 定义阶段顺序
+    stages = [
+        "程序启动",
+        "配置加载完成",
+        "临时目录清空完成",
+        "浏览器启动完成",
+        "页面加载完成",
+        "文本输入完成",
+        "音频上传完成",
+        "按钮点击完成",
+        "文件监控开始",
+        "文件拷贝完成",
+        "程序结束"
+    ]
+    
+    # 打印各阶段时间戳
+    print("各阶段时间戳:")
+    for stage in stages:
+        if stage in timestamps:
+            print(f"  {stage}: {timestamps[stage]['time_str']}")
+        else:
+            print(f"  {stage}: 未执行")
+    
+    print(f"\n各阶段耗时:")
+    
+    # 计算各阶段耗时
+    stage_durations = []
+    for i in range(len(stages) - 1):
+        current_stage = stages[i]
+        next_stage = stages[i + 1]
+        
+        if current_stage in timestamps and next_stage in timestamps:
+            duration = calculate_duration(current_stage, next_stage)
+            stage_durations.append((current_stage, next_stage, duration))
+            print(f"  {current_stage} -> {next_stage}: {duration:.2f}秒")
+    
+    # 计算总耗时
+    if "程序启动" in timestamps and "程序结束" in timestamps:
+        total_duration = calculate_duration("程序启动", "程序结束")
+        print(f"\n总耗时: {total_duration:.2f}秒")
+        
+        # 计算各阶段占总时间的百分比
+        print(f"\n各阶段占比:")
+        for start_stage, end_stage, duration in stage_durations:
+            percentage = (duration / total_duration) * 100 if total_duration > 0 else 0
+            print(f"  {start_stage} -> {end_stage}: {percentage:.1f}%")
+    
+    print(f"{'='*60}")
 
 def parse_arguments():
     """解析命令行参数"""
@@ -540,6 +632,9 @@ def input_multiple_files_to_textareas(args, config):
         
         print("Chrome浏览器已成功启动！")
         
+        # 记录浏览器启动完成时间戳
+        record_timestamp("浏览器启动完成")
+        
         # 打开本地连接
         print(f"正在打开连接: {target_url}")
         driver.get(target_url)
@@ -556,6 +651,9 @@ def input_multiple_files_to_textareas(args, config):
         time.sleep(page_load_timeout)
         print("页面刷新完成！")
         print(f"刷新后页面标题: {driver.title}")
+        
+        # 记录页面加载完成时间戳
+        record_timestamp("页面加载完成")
         
         # 查找所有匹配的textarea元素
         print(f"正在查找所有匹配的textarea: {textarea_selector}")
@@ -604,6 +702,9 @@ def input_multiple_files_to_textareas(args, config):
             # 在输入之间稍作等待
             time.sleep(2)
         
+        # 记录文本输入完成时间戳
+        record_timestamp("文本输入完成")
+        
         # 上传音频文件
         audio_success_count = 0
         for config_item in audio_files_config:
@@ -623,6 +724,9 @@ def input_multiple_files_to_textareas(args, config):
                 time.sleep(2)
             else:
                 print(f"✗ 无法找到上传区域: {config_item['upload_selector']}")
+        
+        # 记录音频上传完成时间戳
+        record_timestamp("音频上传完成")
         
         print(f"\n{'='*50}")
         print(f"操作完成！")
@@ -742,6 +846,9 @@ def input_multiple_files_to_textareas(args, config):
             if not button_clicked:
                 print("✗ 所有按钮选择器都失败了，无法点击按钮")
         
+        # 记录按钮点击完成时间戳
+        record_timestamp("按钮点击完成")
+        
         # 监控临时目录并拷贝文件
         temp_directory = config.get("temp_directory", "")
         monitoring_config = config.get("monitoring", {})
@@ -752,17 +859,39 @@ def input_multiple_files_to_textareas(args, config):
             print("步骤3: 监控临时目录并拷贝文件")
             print(f"{'='*50}")
             
+            # 记录文件监控开始时间戳
+            record_timestamp("文件监控开始")
+            
             check_interval = monitoring_config.get("check_interval", 60)
             max_wait_time = monitoring_config.get("max_wait_time", 600)
             
             copy_success = monitor_temp_directory_and_copy(
                 temp_directory, 
+                config,
                 check_interval, 
                 max_wait_time
             )
             
             if copy_success:
                 print("✓ 文件监控和拷贝操作完成")
+                # 记录文件拷贝完成时间戳
+                record_timestamp("文件拷贝完成")
+                
+                # 等待指定秒数后再关闭浏览器
+                output_config = config.get("output", {})
+                wait_before_close = output_config.get("wait_before_close", 0)
+                auto_close = output_config.get("auto_close", False)  # 新增自动关闭选项
+                
+                if wait_before_close > 0:
+                    print(f"拷贝文件后等待 {wait_before_close} 秒...")
+                    time.sleep(wait_before_close)
+                
+                # 如果设置了自动关闭，则关闭浏览器
+                if auto_close:
+                    print("正在关闭浏览器...")
+                    driver.quit()
+                    print("浏览器已关闭！")
+                    return text_success_count == len(text_files_config) and audio_success_count == len(audio_files_config)
             else:
                 print("✗ 文件监控和拷贝操作失败")
             
@@ -794,6 +923,9 @@ def input_multiple_files_to_textareas(args, config):
 
 def main():
     """主函数"""
+    # 记录程序启动时间戳
+    record_timestamp("程序启动")
+    
     # 解析命令行参数
     args = parse_arguments()
     
@@ -804,6 +936,9 @@ def main():
     if not config:
         print("无法加载配置文件，程序退出")
         return
+    
+    # 记录配置加载完成时间戳
+    record_timestamp("配置加载完成")
     
     # 显示配置信息
     text_files = config.get("text_files", [])
@@ -821,6 +956,11 @@ def main():
     if monitoring_config.get('enabled', True):
         print(f"检查间隔: {monitoring_config.get('check_interval', 60)}秒")
         print(f"最大等待: {monitoring_config.get('max_wait_time', 600)}秒")
+    
+    output_config = config.get("output", {})
+    print(f"输出目录: {output_config.get('directory', 'data')}")
+    print(f"输出文件名: {output_config.get('filename', 'output_audio.wav')}")
+    
     print(f"文本文件数量: {len(text_files)}")
     for i, text_file in enumerate(text_files, 1):
         print(f"  文本文件{i}: {text_file['file_path']} -> 第{text_file['textarea_index']+1}个textarea")
@@ -837,15 +977,34 @@ def main():
         if not clear_temp_directory(temp_directory):
             print("⚠️ 临时目录清空失败，但继续执行后续操作")
         print(f"{'='*50}")
+        
+        # 记录临时目录清空完成时间戳
+        record_timestamp("临时目录清空完成")
     
     print("\n开始执行自动化操作...\n")
     
-    # 执行自动化操作
-    success = input_multiple_files_to_textareas(args, config)
-    
-    if success:
-        print("所有自动化操作完成！")
-    else:
+    try:
+        # 执行自动化操作
+        success = input_multiple_files_to_textareas(args, config)
+        
+        # 记录程序结束时间戳
+        record_timestamp("程序结束")
+        
+        # 打印时间统计摘要
+        print_timing_summary()
+        
+        if success:
+            print("所有自动化操作完成！")
+        else:
+            print("部分或全部自动化操作失败！")
+    except Exception as e:
+        # 记录程序异常结束时间戳
+        record_timestamp("程序结束")
+        
+        # 打印时间统计摘要
+        print_timing_summary()
+        
+        print(f"程序执行过程中发生异常: {e}")
         print("部分或全部自动化操作失败！")
 
 def load_config(config_file="config.json"):
@@ -914,6 +1073,12 @@ def create_default_config(config_file="config.json"):
         "browser": {
             "headless": False,
             "window_size": "1920,1080"
+        },
+        "output": {
+            "directory": "data",
+            "filename": "output_audio.wav",
+            "wait_before_close": 5,
+            "auto_close": True
         },
         "monitoring": {
             "enabled": True,
@@ -1001,12 +1166,13 @@ def clear_temp_directory(temp_dir):
         print(f"✗ 清空临时目录失败: {e}")
         return False
 
-def monitor_temp_directory_and_copy(temp_dir, monitor_interval=60, max_wait_time=600):
+def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_wait_time=600):
     """
-    监控临时目录，检测新文件生成并拷贝到当前目录
+    监控临时目录，检测新文件生成并拷贝到指定目录
     
     Args:
         temp_dir: 临时目录路径
+        config: 配置字典
         monitor_interval: 检查间隔（秒），默认60秒
         max_wait_time: 最大等待时间（秒），默认600秒（10分钟）
     
@@ -1016,6 +1182,14 @@ def monitor_temp_directory_and_copy(temp_dir, monitor_interval=60, max_wait_time
     print(f"\n开始监控临时目录: {temp_dir}")
     print(f"检查间隔: {monitor_interval}秒")
     print(f"最大等待时间: {max_wait_time}秒")
+    
+    # 从配置文件读取输出设置
+    output_config = config.get("output", {})
+    output_dir = output_config.get("directory", "data")
+    output_filename = output_config.get("filename", "output_audio.wav")
+    
+    print(f"输出目录: {output_dir}")
+    print(f"输出文件名: {output_filename}")
     
     # 记录开始时间
     start_time = time.time()
@@ -1148,15 +1322,23 @@ def monitor_temp_directory_and_copy(temp_dir, monitor_interval=60, max_wait_time
         print(f"audio.wav 文件大小: {audio_stat.st_size} 字节")
         print(f"audio.wav 修改时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(audio_stat.st_mtime))}")
         
-        # 拷贝audio.wav文件到当前目录
+        # 创建输出目录
         current_dir = os.getcwd()
-        dest_path = os.path.join(current_dir, 'audio.wav')
+        output_path = os.path.join(current_dir, output_dir)
+        
+        if not os.path.exists(output_path):
+            print(f"创建输出目录: {output_path}")
+            os.makedirs(output_path, exist_ok=True)
+        
+        # 拷贝audio.wav文件到输出目录
+        dest_path = os.path.join(output_path, output_filename)
         
         # 如果目标文件已存在，添加时间戳
         if os.path.exists(dest_path):
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            new_name = f"audio_{timestamp}.wav"
-            dest_path = os.path.join(current_dir, new_name)
+            name, ext = os.path.splitext(output_filename)
+            new_name = f"{name}_{timestamp}{ext}"
+            dest_path = os.path.join(output_path, new_name)
             print(f"目标文件已存在，重命名为: {new_name}")
         
         print(f"正在拷贝 audio.wav 到: {dest_path}")
