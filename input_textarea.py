@@ -192,7 +192,7 @@ def upload_file_to_dropzone(driver, upload_area, file_path, file_description):
     
     # 滚动到拖拽区域
     driver.execute_script("arguments[0].scrollIntoView(true);", upload_area)
-    time.sleep(1)
+    time.sleep(0.3)  # 减少等待时间
     
     # 显示拖拽区域信息
     print(f"拖拽区域位置: {upload_area.location}")
@@ -320,7 +320,7 @@ def upload_file_to_dropzone(driver, upload_area, file_path, file_description):
             print(f"尝试方法4：点击拖拽区域...")
             
             upload_area.click()
-            time.sleep(1)
+            time.sleep(0.3)  # 减少等待时间
             
             print(f"✓ 方法4成功：点击拖拽区域完成")
             success = True
@@ -398,7 +398,7 @@ def input_text_to_textarea(driver, textarea, file_content, textarea_index):
     
     # 滚动到textarea
     driver.execute_script("arguments[0].scrollIntoView(true);", textarea)
-    time.sleep(1)
+    time.sleep(0.3)  # 减少等待时间
     
     # 显示textarea信息
     print(f"第{textarea_index}个Textarea位置: {textarea.location}")
@@ -862,7 +862,7 @@ def input_multiple_files_to_textareas(args, config):
             # 记录文件监控开始时间戳
             record_timestamp("文件监控开始")
             
-            check_interval = monitoring_config.get("check_interval", 60)
+            check_interval = monitoring_config.get("no_update_timeout", 60)
             max_wait_time = monitoring_config.get("max_wait_time", 600)
             
             copy_success = monitor_temp_directory_and_copy(
@@ -954,7 +954,8 @@ def main():
     print(f"窗口大小: {browser_config.get('window_size', '1920,1080')}")
     print(f"监控功能: {'启用' if monitoring_config.get('enabled', True) else '禁用'}")
     if monitoring_config.get('enabled', True):
-        print(f"检查间隔: {monitoring_config.get('check_interval', 60)}秒")
+        print(f"扫描间隔: 2秒")
+        print(f"无更新超时: {monitoring_config.get('no_update_timeout', 60)}秒")
         print(f"最大等待: {monitoring_config.get('max_wait_time', 600)}秒")
     
     output_config = config.get("output", {})
@@ -1082,7 +1083,7 @@ def create_default_config(config_file="config.json"):
         },
         "monitoring": {
             "enabled": True,
-            "check_interval": 60,
+            "no_update_timeout": 60,
             "max_wait_time": 600
         },
         "timeouts": {
@@ -1173,14 +1174,15 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
     Args:
         temp_dir: 临时目录路径
         config: 配置字典
-        monitor_interval: 检查间隔（秒），默认60秒
+        monitor_interval: 无更新超时时间（秒），默认60秒
         max_wait_time: 最大等待时间（秒），默认600秒（10分钟）
     
     Returns:
         bool: 是否成功拷贝文件
     """
     print(f"\n开始监控临时目录: {temp_dir}")
-    print(f"检查间隔: {monitor_interval}秒")
+    print(f"扫描间隔: 2秒")
+    print(f"无更新超时: {monitor_interval}秒")
     print(f"最大等待时间: {max_wait_time}秒")
     
     # 从配置文件读取输出设置
@@ -1193,6 +1195,7 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
     
     # 记录开始时间
     start_time = time.time()
+    last_update_time = start_time  # 记录最后文件更新时间
     
     # 获取初始文件列表
     initial_items = set()
@@ -1203,14 +1206,13 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
     if initial_items:
         print(f"初始项目: {', '.join(initial_items)}")
     
-    last_check_time = start_time
-    consecutive_no_new_items = 0
+    scan_count = 0
     
     while True:
         current_time = time.time()
         elapsed_time = current_time - start_time
         
-        # 检查是否超时
+        # 检查是否超过最大等待时间
         if elapsed_time > max_wait_time:
             print(f"✗ 监控超时，已等待 {elapsed_time:.1f} 秒")
             return False
@@ -1223,40 +1225,24 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
         # 找出新项目
         new_items = current_items - initial_items
         
+        scan_count += 1
+        
         if new_items:
-            print(f"✓ 发现 {len(new_items)} 个新项目: {', '.join(new_items)}")
-            consecutive_no_new_items = 0
-            
-            # 等待一分钟后再检查
-            print(f"等待 {monitor_interval} 秒后再次检查...")
-            time.sleep(monitor_interval)
-            
-            # 再次检查是否还有新项目生成
-            updated_items = set()
-            if os.path.exists(temp_dir):
-                updated_items = set(os.listdir(temp_dir))
-            
-            newer_items = updated_items - current_items
-            
-            if newer_items:
-                print(f"✓ 继续发现 {len(newer_items)} 个新项目: {', '.join(newer_items)}")
-                print("项目仍在生成中，继续等待...")
-                current_items = updated_items
-                continue
-            else:
-                print("✓ 项目生成完成，开始查找最新文件夹...")
-                break
+            print(f"第{scan_count}次扫描: ✓ 发现 {len(new_items)} 个新项目: {', '.join(new_items)}")
+            last_update_time = current_time  # 更新最后文件更新时间
+            initial_items = current_items  # 更新初始项目列表
         else:
-            consecutive_no_new_items += 1
-            print(f"第 {consecutive_no_new_items} 次检查：未发现新项目")
+            # 计算距离上次文件更新的时间
+            time_since_last_update = current_time - last_update_time
+            print(f"第{scan_count}次扫描: 未发现新项目 (距离上次更新: {time_since_last_update:.1f}秒)")
             
-            # 如果连续多次没有新项目，可能项目已经生成完成
-            if consecutive_no_new_items >= 2:
-                print("连续多次未发现新项目，可能项目生成已完成")
+            # 如果超过指定时间没有文件更新，则认为文件生成完成
+            if time_since_last_update >= monitor_interval:
+                print(f"✓ 已连续 {monitor_interval} 秒无文件更新，认为文件生成完成")
                 break
         
-        # 等待下次检查
-        time.sleep(monitor_interval)
+        # 等待2秒后进行下次扫描
+        time.sleep(2)
     
     # 查找时间戳最新的文件夹并拷贝audio.wav
     try:

@@ -31,18 +31,18 @@
     "output": {
         "directory": "data",
         "filename": "output_audio.wav",
-        "wait_before_close": 5,
+        "wait_before_close": 1,
         "auto_close": true
     },
     "monitoring": {
         "enabled": true,
-        "check_interval": 60,
-        "max_wait_time": 600
+        "no_update_timeout": 60,
+        "max_wait_time": 300
     },
     "timeouts": {
-        "page_load": 3,
-        "element_wait": 10,
-        "button_interval": 2,
-        "observe_time": 15
+        "page_load": 2,
+        "element_wait": 5,
+        "button_interval": 1,
+        "observe_time": 5
     }
 } 
