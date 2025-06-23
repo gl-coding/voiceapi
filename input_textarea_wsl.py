@@ -19,13 +19,79 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import os
 from datetime import datetime
+import tempfile
+import uuid
 
 # 全局时间戳记录字典
 timestamps = {}
 
+def try_connect_url(driver, url, timeout=2):
+    """
+    尝试连接指定的URL
+    
+    Args:
+        driver: WebDriver实例
+        url: 要连接的URL
+        timeout: 超时时间（秒）
+    
+    Returns:
+        bool: 是否连接成功
+    """
+    try:
+        print(f"\n尝试连接: {url}")
+        driver.set_page_load_timeout(timeout)
+        driver.get(url)
+        return True
+    except Exception as e:
+        print(f"连接失败: {e}")
+        return False
+
+def convert_windows_to_wsl_path(windows_path):
+    """
+    将Windows路径转换为WSL路径
+    
+    Args:
+        windows_path: Windows格式的路径
+    
+    Returns:
+        WSL格式的路径
+    """
+    if not windows_path:
+        return windows_path
+        
+    # 如果已经是Linux路径格式，直接返回
+    if windows_path.startswith('/'):
+        return windows_path
+        
+    try:
+        # 移除盘符前的斜杠（如果有）
+        if windows_path.startswith('/'):
+            windows_path = windows_path[1:]
+            
+        # 替换盘符（例如：D:/path 转换为 /mnt/d/path）
+        if ':' in windows_path:
+            drive_letter = windows_path[0].lower()
+            path_without_drive = windows_path[2:]
+            wsl_path = f"/mnt/{drive_letter}/{path_without_drive}"
+        else:
+            wsl_path = windows_path
+            
+        # 统一使用正斜杠
+        wsl_path = wsl_path.replace('\\', '/')
+        
+        # 移除多余的斜杠
+        wsl_path = '/'.join(filter(None, wsl_path.split('/')))
+        if not wsl_path.startswith('/'):
+            wsl_path = '/' + wsl_path
+            
+        return wsl_path
+    except Exception as e:
+        print(f"路径转换失败: {e}")
+        return windows_path
+
 def load_paths_from_file(paths_file="paths.txt"):
     """
-    从paths.txt文件加载文件路径配置
+    从paths.txt文件加载文件路径配置，并转换为WSL路径
     
     Args:
         paths_file: 路径配置文件路径
@@ -59,12 +125,16 @@ def load_paths_from_file(paths_file="paths.txt"):
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
+                    # 转换为WSL路径
+                    value = convert_windows_to_wsl_path(value)
                     paths[key] = value
                 else:
                     print(f"警告：第{line_num}行格式错误，跳过: {line}")
         
         print(f"✓ 成功加载路径配置: {paths_file}")
-        print(f"加载的路径配置: {paths}")
+        print(f"加载的路径配置（已转换为WSL路径）:")
+        for key, value in paths.items():
+            print(f"  {key}: {value}")
         return paths
         
     except Exception as e:
@@ -178,21 +248,34 @@ def parse_arguments():
 def get_chrome_driver_path():
     """获取正确的ChromeDriver路径"""
     try:
-        driver_path = ChromeDriverManager().install()
+        # 首先尝试使用本地安装的 ChromeDriver
+        local_driver_path = "/usr/local/bin/chromedriver"
+        if os.path.exists(local_driver_path):
+            print(f"使用本地安装的 ChromeDriver: {local_driver_path}")
+            return local_driver_path
+
+        # 如果本地安装的 ChromeDriver 不存在，再尝试使用 webdriver_manager
+        print("本地 ChromeDriver 不存在，尝试使用 webdriver_manager 下载...")
         
-        # 确保使用正确的可执行文件路径
-        if not driver_path.endswith('.exe'):
-            # 查找chromedriver.exe文件
-            driver_dir = os.path.dirname(driver_path)
-            for file in os.listdir(driver_dir):
-                if file == 'chromedriver.exe':
-                    driver_path = os.path.join(driver_dir, file)
-                    break
+        # 设置重试次数
+        max_retries = 3
+        retry_count = 0
         
-        print(f"ChromeDriver路径: {driver_path}")
-        return driver_path
+        while retry_count < max_retries:
+            try:
+                driver_path = ChromeDriverManager().install()
+                print(f"ChromeDriver下载成功: {driver_path}")
+                return driver_path
+            except Exception as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    print(f"第 {retry_count} 次尝试失败，等待 5 秒后重试...")
+                    time.sleep(5)
+                else:
+                    print(f"下载 ChromeDriver 失败: {e}")
+                    return None
     except Exception as e:
-        print(f"获取ChromeDriver路径失败: {e}")
+        print(f"获取 ChromeDriver 路径失败: {e}")
         return None
 
 def read_text_file(file_path):
@@ -290,13 +373,16 @@ def upload_file_to_dropzone(driver, upload_area, file_path, file_description):
             }
             mime_type = mime_types.get(file_extension, 'application/octet-stream')
             
+            # 处理文件路径中的反斜杠
+            safe_file_path = abs_file_path.replace('\\', '/')
+            
             # 创建拖拽事件
-            js_code = f"""
+            js_code = """
             var dropZone = arguments[0];
-            var fileName = '{file_name}';
-            var filePath = '{abs_file_path.replace("\\", "\\\\")}';
-            var fileSize = {file_size};
-            var mimeType = '{mime_type}';
+            var fileName = '{}';
+            var filePath = '{}';
+            var fileSize = {};
+            var mimeType = '{}';
             
             // 创建File对象
             var file = new File([''], fileName, {{ 
@@ -333,7 +419,7 @@ def upload_file_to_dropzone(driver, upload_area, file_path, file_description):
             dropZone.dispatchEvent(dropEvent);
             
             return true;
-            """
+            """.format(file_name, safe_file_path, file_size, mime_type)
             
             result = driver.execute_script(js_code, upload_area)
             print(f"✓ 方法2成功：JavaScript拖拽事件已触发")
@@ -485,9 +571,12 @@ def input_text_to_textarea(driver, textarea, file_content, textarea_index):
         try:
             print(f"尝试方法2：JavaScript设置第{textarea_index}个textarea的value...")
             
-            js_code = f"""
+            # 处理特殊字符
+            escaped_content = file_content.replace('`', '\\`').replace('$', '\\$')
+            
+            js_code = """
             var textarea = arguments[0];
-            var content = `{file_content.replace("`", "\\`").replace("$", "\\$")}`;
+            var content = `{}`;
             
             // 设置value
             textarea.value = content;
@@ -505,7 +594,7 @@ def input_text_to_textarea(driver, textarea, file_content, textarea_index):
             textarea.dispatchEvent(focusEvent);
             
             return textarea.value.length;
-            """
+            """.format(escaped_content)
             
             result = driver.execute_script(js_code, textarea)
             print(f"✓ 方法2成功：JavaScript设置第{textarea_index}个textarea的value完成，设置了 {result} 个字符")
@@ -653,20 +742,51 @@ def input_multiple_files_to_textareas(args, config):
         
         # 配置Chrome选项
         chrome_options = Options()
-        
+
+        # WSL环境下的特殊设置
+        chrome_options.add_argument("--no-sandbox")  # WSL环境必需
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")  # WSL环境可选
+
+        # 使用临时配置
+        chrome_options.add_argument("--incognito")  # 使用隐身模式
+        chrome_options.add_argument("--disable-application-cache")  # 禁用应用缓存
+        chrome_options.add_argument("--aggressive-cache-discard")  # 积极丢弃缓存
+        chrome_options.add_argument("--disable-browser-side-navigation")  # 禁用浏览器端导航
+        chrome_options.add_argument("--disable-default-apps")  # 禁用默认应用
+        chrome_options.add_argument("--disable-sync")  # 禁用同步
+        chrome_options.add_argument("--disable-background-networking")  # 禁用后台网络
+        chrome_options.add_argument("--disable-background-timer-throttling")  # 禁用后台计时器限制
+        chrome_options.add_argument("--disable-backgrounding-occluded-windows")  # 禁用背景窗口
+        chrome_options.add_argument("--disable-client-side-phishing-detection")  # 禁用客户端钓鱼检测
+        chrome_options.add_argument("--disable-component-update")  # 禁用组件更新
+        chrome_options.add_argument("--disable-domain-reliability")  # 禁用域可靠性
+        chrome_options.add_argument("--disable-features=TranslateUI")  # 禁用翻译UI
+        chrome_options.add_argument("--disable-hang-monitor")  # 禁用挂起监视器
+        chrome_options.add_argument("--disable-ipc-flooding-protection")  # 禁用IPC洪水保护
+        chrome_options.add_argument("--disable-prompt-on-repost")  # 禁用重新发布提示
+        chrome_options.add_argument("--disable-renderer-backgrounding")  # 禁用渲染器后台处理
+        chrome_options.add_argument("--disable-site-isolation-trials")  # 禁用站点隔离试验
+        chrome_options.add_argument("--disable-web-security")  # 禁用网络安全
+        chrome_options.add_argument("--ignore-certificate-errors")  # 忽略证书错误
+        chrome_options.add_argument("--no-default-browser-check")  # 不检查默认浏览器
+        chrome_options.add_argument("--no-first-run")  # 不运行首次运行任务
+        chrome_options.add_argument("--no-service-autorun")  # 不自动运行服务
+        chrome_options.add_argument("--password-store=basic")  # 使用基本密码存储
+
         # 设置窗口大小
         chrome_options.add_argument(f"--window-size={window_size}")
-        
+
         # 设置无界面模式
         if headless_mode:
-            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--headless=new")  # 新版Chrome需要使用--headless=new
             print("✓ 已启用无界面模式（从配置文件读取）")
         else:
             print("✓ 使用有界面模式（从配置文件读取）")
-        
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
+
+        # 设置User-Agent
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.7151.119 Safari/537.36")
+
         print("正在初始化Chrome浏览器...")
         
         # 获取ChromeDriver路径
@@ -674,18 +794,57 @@ def input_multiple_files_to_textareas(args, config):
         if not driver_path:
             raise Exception("无法获取ChromeDriver路径")
         
-        # 创建WebDriver实例
-        service = Service(driver_path)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        print("Chrome浏览器已成功启动！")
-        
-        # 记录浏览器启动完成时间戳
-        record_timestamp("浏览器启动完成")
-        
-        # 打开本地连接
-        print(f"正在打开连接: {target_url}")
-        driver.get(target_url)
+        try:
+            # 创建WebDriver实例
+            service = Service(
+                driver_path,
+                log_path='chromedriver.log',
+                service_args=['--verbose']
+            )
+            
+            print("正在创建Chrome实例...")
+            driver = webdriver.Chrome(
+                service=service,
+                options=chrome_options
+            )
+            
+            # 设置超时
+            driver.set_page_load_timeout(page_load_timeout)
+            driver.set_script_timeout(page_load_timeout)
+            driver.implicitly_wait(element_wait_timeout)
+            
+            print("Chrome浏览器已成功启动！")
+            
+            # 记录浏览器启动完成时间戳
+            record_timestamp("浏览器启动完成")
+            
+            # 尝试连接主URL和备用URL
+            target_url = config.get("url", "http://127.0.0.1:50004/")
+            backup_urls = config.get("backup_urls", [])
+            
+            # 先尝试主URL
+            if try_connect_url(driver, target_url):
+                print(f"✓ 成功连接到主URL: {target_url}")
+            else:
+                print(f"主URL连接失败，尝试备用URL...")
+                
+                # 尝试所有备用URL
+                connected = False
+                for url in backup_urls:
+                    if try_connect_url(driver, url):
+                        print(f"✓ 成功连接到备用URL: {url}")
+                        target_url = url
+                        connected = True
+                        break
+                
+                if not connected:
+                    print("✗ 所有URL都连接失败")
+                    driver.quit()
+                    return False
+                    
+        except Exception as e:
+            print(f"创建WebDriver实例时发生错误: {e}")
+            raise
         
         # 等待页面加载
         time.sleep(page_load_timeout)
@@ -963,7 +1122,7 @@ def input_multiple_files_to_textareas(args, config):
         driver.quit()
         print("浏览器已关闭！")
         return text_success_count == len(text_files_config) and audio_success_count == len(audio_files_config)
-        
+            
     except Exception as e:
         print(f"发生错误: {str(e)}")
         print(f"请确保本地服务正在运行在 {target_url}")
@@ -1133,6 +1292,11 @@ def load_config(config_file="config.json"):
             if "temp_directory" in paths:
                 config["temp_directory"] = paths["temp_directory"]
                 print(f"  临时目录路径: {paths['temp_directory']}")
+            
+            # 确保输出目录使用WSL路径
+            if "output" in config and "directory" in config["output"]:
+                config["output"]["directory"] = convert_windows_to_wsl_path(config["output"]["directory"])
+                print(f"  输出目录路径: {config['output']['directory']}")
         
         return config
         
@@ -1296,6 +1460,10 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
     output_config = config.get("output", {})
     output_dir = output_config.get("directory", "data")
     output_filename = output_config.get("filename", "output_audio.wav")
+    
+    # 确保输出目录是WSL路径
+    output_dir = convert_windows_to_wsl_path(output_dir)
+    temp_dir = convert_windows_to_wsl_path(temp_dir)
     
     print(f"输出目录: {output_dir}")
     print(f"输出文件名: {output_filename}")

@@ -22,11 +22,17 @@
         "textarea": "textarea.scroll-hide.svelte-1f354aw",
         "button": "button.lg.secondary.svelte-cmf5ev"
     },
-    "url": "http://127.0.0.1:50004/",
+    "url": "http://127.0.0.1:50005/",
+    "backup_urls": [
+        "http://192.168.1.4:50004/",
+        "http://localhost:50004/",
+        "http://127.0.0.1:50004/"
+    ],
     "temp_directory": "",
     "browser": {
-        "headless": true,
-        "window_size": "1920,1080"
+        "headless": false,
+        "window_size": "1920,1080",
+        "driver_path": "d:/wsl_space/driver/chromedriver.exe"
     },
     "output": {
         "directory": "data",
