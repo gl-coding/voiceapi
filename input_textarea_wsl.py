@@ -89,7 +89,7 @@ def convert_windows_to_wsl_path(windows_path):
         print(f"路径转换失败: {e}")
         return windows_path
 
-def load_paths_from_file(paths_file="paths.txt"):
+def load_paths_from_file(paths_file="paths_linux.txt"):
     """
     从paths.txt文件加载文件路径配置，并转换为WSL路径
     

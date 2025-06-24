@@ -167,10 +167,17 @@ def parse_arguments():
         epilog="""
 使用示例:
   python input_textarea.py                    # 使用配置文件中的设置
+  python input_textarea.py -f filename        # 指定文件名，用于替换text_file_2和audio_file_1的文件名
   python input_textarea.py -h                 # 显示帮助信息
 
 注意: 浏览器设置现在从config.json配置文件中读取
         """
+    )
+    
+    parser.add_argument(
+        '-f', '--filename',
+        type=str,
+        help='指定文件名（不含扩展名），用于替换text_file_2和audio_file_1的文件名'
     )
     
     return parser.parse_args()
@@ -998,7 +1005,7 @@ def main():
     print("=== 输入文本文件内容到textarea区域并上传音频文件 ===")
     
     # 加载配置文件
-    config = load_config()
+    config = load_config(filename=args.filename)
     if not config:
         print("\n" + "="*60)
         print("程序启动失败！")
@@ -1090,12 +1097,13 @@ def main():
         print(f"程序执行过程中发生异常: {e}")
         print("部分或全部自动化操作失败！")
 
-def load_config(config_file="config_win.json"):
+def load_config(config_file="config_win.json", filename=None):
     """
     从config.json文件加载配置，并使用paths.txt中的路径
     
     Args:
         config_file: 配置文件路径
+        filename: 可选的文件名（不含扩展名），用于替换text_file_2和audio_file_1的文件名
     
     Returns:
         配置字典
@@ -1140,13 +1148,35 @@ def load_config(config_file="config_win.json"):
                 print(f"  文本文件1路径: {paths['text_file_1']}")
             
             if "text_file_2" in paths and len(config.get("text_files", [])) > 1:
-                config["text_files"][1]["file_path"] = paths["text_file_2"]
-                print(f"  文本文件2路径: {paths['text_file_2']}")
+                text_file_2_path = paths["text_file_2"]
+                
+                # 如果指定了filename参数，替换text_file_2的文件名
+                if filename:
+                    directory = os.path.dirname(text_file_2_path)
+                    original_filename = os.path.basename(text_file_2_path)
+                    extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+                    new_filename = f"{filename}{extension}"
+                    text_file_2_path = os.path.join(directory, new_filename)
+                    print(f"  使用指定文件名替换text_file_2: {filename}{extension}")
+                
+                config["text_files"][1]["file_path"] = text_file_2_path
+                print(f"  文本文件2路径: {text_file_2_path}")
             
             # 替换音频文件路径
             if "audio_file_1" in paths and len(config.get("audio_files", [])) > 0:
-                config["audio_files"][0]["file_path"] = paths["audio_file_1"]
-                print(f"  音频文件1路径: {paths['audio_file_1']}")
+                audio_file_1_path = paths["audio_file_1"]
+                
+                # 如果指定了filename参数，替换audio_file_1的文件名
+                if filename:
+                    directory = os.path.dirname(audio_file_1_path)
+                    original_filename = os.path.basename(audio_file_1_path)
+                    extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+                    new_filename = f"{filename}{extension}"
+                    audio_file_1_path = os.path.join(directory, new_filename)
+                    print(f"  使用指定文件名替换audio_file_1: {filename}{extension}")
+                
+                config["audio_files"][0]["file_path"] = audio_file_1_path
+                print(f"  音频文件1路径: {audio_file_1_path}")
             
             # 替换临时目录路径
             if "temp_directory" in paths:
