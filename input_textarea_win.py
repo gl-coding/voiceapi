@@ -166,9 +166,11 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  python input_textarea.py                    # 使用配置文件中的设置
-  python input_textarea.py -f filename        # 指定文件名，用于替换text_file_2和audio_file_1的文件名
-  python input_textarea.py -h                 # 显示帮助信息
+  python input_textarea.py                         # 使用配置文件中的设置
+  python input_textarea.py -f filename             # 指定文件名，用于替换text_file_2和audio_file_1的文件名
+  python input_textarea.py -o outputname           # 指定输出文件名
+  python input_textarea.py -f filename -o output   # 同时指定输入和输出文件名
+  python input_textarea.py -h                      # 显示帮助信息
 
 注意: 浏览器设置现在从config.json配置文件中读取
         """
@@ -178,6 +180,12 @@ def parse_arguments():
         '-f', '--filename',
         type=str,
         help='指定文件名（不含扩展名），用于替换text_file_2和audio_file_1的文件名'
+    )
+    
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        help='指定最后拷贝的输出文件名（不含扩展名），默认使用配置文件中的设置'
     )
     
     return parser.parse_args()
@@ -1005,7 +1013,7 @@ def main():
     print("=== 输入文本文件内容到textarea区域并上传音频文件 ===")
     
     # 加载配置文件
-    config = load_config(filename=args.filename)
+    config = load_config(filename=args.filename, output_filename=args.output)
     if not config:
         print("\n" + "="*60)
         print("程序启动失败！")
@@ -1097,13 +1105,14 @@ def main():
         print(f"程序执行过程中发生异常: {e}")
         print("部分或全部自动化操作失败！")
 
-def load_config(config_file="config_win.json", filename=None):
+def load_config(config_file="config_win.json", filename=None, output_filename=None):
     """
     从config.json文件加载配置，并使用paths.txt中的路径
     
     Args:
         config_file: 配置文件路径
         filename: 可选的文件名（不含扩展名），用于替换text_file_2和audio_file_1的文件名
+        output_filename: 可选的输出文件名（不含扩展名），用于指定最后拷贝的文件名
     
     Returns:
         配置字典
@@ -1182,6 +1191,15 @@ def load_config(config_file="config_win.json", filename=None):
             if "temp_directory" in paths:
                 config["temp_directory"] = paths["temp_directory"]
                 print(f"  临时目录路径: {paths['temp_directory']}")
+        
+        # 如果指定了output_filename参数，替换输出文件名
+        if output_filename:
+            output_config = config.get("output", {})
+            original_filename = output_config.get("filename", "output_audio.wav")
+            extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+            new_output_filename = f"{output_filename}{extension}"
+            config["output"]["filename"] = new_output_filename
+            print(f"  使用指定输出文件名: {new_output_filename}")
         
         return config
         
