@@ -1090,7 +1090,7 @@ def main():
         print(f"程序执行过程中发生异常: {e}")
         print("部分或全部自动化操作失败！")
 
-def load_config(config_file="config.json"):
+def load_config(config_file="config_win.json"):
     """
     从config.json文件加载配置，并使用paths.txt中的路径
     
