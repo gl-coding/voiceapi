@@ -7,6 +7,7 @@
 import argparse
 import json
 import shutil
+import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -22,6 +23,166 @@ from datetime import datetime
 
 # 全局时间戳记录字典
 timestamps = {}
+
+# API接口配置
+API_BASE_URL = "https://aliyun.ideapool.club/datapost"
+#API_BASE_URL = "http://127.0.0.1:8000/datapost"
+
+def fetch_params_from_api(max_wait_time=300, check_interval=1):
+    """
+    从API接口获取参数，如果数据为空则等待并定期检查
+    
+    Args:
+        max_wait_time: 最大等待时间（秒），默认5分钟
+        check_interval: 检查间隔（秒），默认1秒
+    
+    Returns:
+        dict: 包含voice、outfile、content等参数的字典，如果失败返回None
+    """
+    print("\n正在从API接口获取参数...")
+    start_time = time.time()
+    check_count = 0
+    
+    while True:
+        check_count += 1
+        elapsed_time = time.time() - start_time
+        
+        # 检查是否超过最大等待时间
+        if elapsed_time > max_wait_time:
+            print(f"❌ API等待超时，已等待 {elapsed_time:.1f} 秒，共检查 {check_count} 次")
+            return None
+        
+        try:
+            response = requests.get(f"{API_BASE_URL}/voice/list/", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    items = data.get('items', [])
+                    if items:
+                        # 显示找到的数据数量
+                        total_items = len(items)
+                        print(f"✅ 成功获取到API数据 (第{check_count}次检查，耗时{elapsed_time:.1f}秒):")
+                        print(f"  📊 共找到 {total_items} 条数据")
+                        
+                        # 获取第一条数据作为参数（按时间排序，最新的在前）
+                        latest_item = items[0]
+                        print(f"  📝 处理第1条数据:")
+                        print(f"    Voice: {latest_item.get('voice', '')}")
+                        print(f"    Outfile: {latest_item.get('outfile', '')}")
+                        content_text = latest_item.get('content', '')
+                        if len(content_text) > 100:
+                            print(f"    Content: {content_text[:100]}...")
+                        else:
+                            print(f"    Content: {content_text}")
+                        print(f"    时间: {latest_item.get('created_at', '')}")
+                        
+                        if total_items > 1:
+                            print(f"  ⏳ 剩余 {total_items - 1} 条数据将在后续轮次中处理")
+                        
+                        return latest_item
+                    else:
+                        # 数据为空，继续等待
+                        if check_count == 1:
+                            print("⏳ API接口数据为空，开始等待新数据...")
+                            print(f"   检查间隔: {check_interval}秒，最大等待时间: {max_wait_time}秒")
+                        
+                        # 每10次检查显示一次状态
+                        if check_count % 10 == 0:
+                            print(f"   已检查 {check_count} 次，等待时间 {elapsed_time:.1f}秒...")
+                        
+                        # 等待指定间隔后继续检查
+                        time.sleep(check_interval)
+                        continue
+                else:
+                    print(f"❌ API接口返回失败: {data.get('message', '未知错误')}")
+                    return None
+            else:
+                print(f"❌ API请求失败，状态码: {response.status_code}")
+                return None
+                
+        except requests.exceptions.Timeout:
+            print(f"⚠️ API请求超时 (第{check_count}次检查)，继续尝试...")
+            time.sleep(check_interval)
+            continue
+        except requests.exceptions.ConnectionError:
+            print(f"⚠️ API连接失败 (第{check_count}次检查)，继续尝试...")
+            time.sleep(check_interval)
+            continue
+        except Exception as e:
+            print(f"❌ 获取API参数异常: {e}")
+            return None
+
+def delete_api_data(item_id):
+    """
+    删除API接口中的单条数据
+    
+    Args:
+        item_id: 要删除的数据ID
+    
+    Returns:
+        bool: 是否成功删除
+    """
+    try:
+        print(f"\n正在删除API数据 (ID: {item_id})...")
+        response = requests.post(f"{API_BASE_URL}/voice/delete/{item_id}/", timeout=10)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'success':
+                deleted_data = result.get('deleted_data', {})
+                print(f"✅ API数据删除成功: {result.get('message', '已删除')}")
+                if deleted_data:
+                    print(f"   删除的数据: voice={deleted_data.get('voice', 'N/A')}, content={deleted_data.get('content', 'N/A')[:50]}...")
+                return True
+            else:
+                print(f"❌ API数据删除失败: {result.get('message', '未知错误')}")
+                return False
+        else:
+            print(f"❌ 删除请求失败，状态码: {response.status_code}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        print("❌ 删除请求超时")
+        return False
+    except requests.exceptions.ConnectionError:
+        print("❌ 删除请求连接失败")
+        return False
+    except Exception as e:
+        print(f"❌ 删除API数据异常: {e}")
+        return False
+
+def clear_api_data():
+    """
+    清空API接口中的所有数据（保留用于兼容性）
+    
+    Returns:
+        bool: 是否成功清空
+    """
+    try:
+        print("\n正在清空所有API数据...")
+        response = requests.get(f"{API_BASE_URL}/voice/clear/", timeout=10)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'success':
+                print(f"✅ API数据清空成功: {result.get('message', '已清空')}")
+                return True
+            else:
+                print(f"❌ API数据清空失败: {result.get('message', '未知错误')}")
+                return False
+        else:
+            print(f"❌ 清空请求失败，状态码: {response.status_code}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        print("❌ 清空请求超时")
+        return False
+    except requests.exceptions.ConnectionError:
+        print("❌ 清空请求连接失败")
+        return False
+    except Exception as e:
+        print(f"❌ 清空API数据异常: {e}")
+        return False
 
 def load_paths_from_file(paths_file="paths_windows.txt"):
     """
@@ -169,9 +330,18 @@ def parse_arguments():
   python input_textarea.py                         # 使用配置文件中的设置
   python input_textarea.py -f filename             # 指定文件名，用于替换text_file_2和audio_file_1的文件名
   python input_textarea.py -o outputname           # 指定输出文件名
+  python input_textarea.py -c "文本内容"           # 直接指定要输入的文本内容
+  python input_textarea.py -a                      # 从API接口获取参数（推荐，会等待数据）
+  python input_textarea.py -a -o output            # 从API获取参数并指定输出文件名
+  python input_textarea.py -a --api-loop           # API循环模式，持续监控并自动执行（推荐）
+  python input_textarea.py -a --api-loop --api-fast # API循环+快速模式，多数据时立即处理
+  python input_textarea.py -a --api-loop --api-wait 600  # API循环模式，单次最大等待10分钟
+  python input_textarea.py -a --api-interval 2     # 从API获取参数，每2秒检查一次
   python input_textarea.py -f filename -o output   # 同时指定输入和输出文件名
+  python input_textarea.py -c "内容" -o output     # 指定文本内容和输出文件名
   python input_textarea.py -h                      # 显示帮助信息
 
+参数优先级: -a (API) > -c (直接内容) > -f (文件名) > 配置文件
 注意: 浏览器设置现在从config.json配置文件中读取
         """
     )
@@ -186,6 +356,44 @@ def parse_arguments():
         '-o', '--output',
         type=str,
         help='指定最后拷贝的输出文件名（不含扩展名），默认使用配置文件中的设置'
+    )
+    
+    parser.add_argument(
+        '-c', '--content',
+        type=str,
+        help='直接指定要输入到第一个textarea的文本内容，用于替换content文件（text_file_1），优先级高于配置文件'
+    )
+    
+    parser.add_argument(
+        '-a', '--api',
+        action='store_true',
+        help='从API接口获取参数（voice、outfile、content），优先级最高，会覆盖其他参数。如果数据为空会等待新数据（默认最大等待5分钟）'
+    )
+    
+    parser.add_argument(
+        '--api-wait',
+        type=int,
+        default=300,
+        help='使用API模式时的最大等待时间（秒），默认300秒（5分钟）'
+    )
+    
+    parser.add_argument(
+        '--api-interval',
+        type=int,
+        default=1,
+        help='使用API模式时的检查间隔（秒），默认1秒'
+    )
+    
+    parser.add_argument(
+        '--api-loop',
+        action='store_true',
+        help='启用API循环模式，完成一次操作后继续监控API，有新数据时自动执行下一轮操作'
+    )
+    
+    parser.add_argument(
+        '--api-fast',
+        action='store_true',
+        help='启用快速处理模式，当有多条数据时立即处理下一条，无需等待间隔时间'
     )
     
     return parser.parse_args()
@@ -646,9 +854,9 @@ def input_multiple_files_to_textareas(args, config):
     observe_timeout = timeouts.get("observe_time", 15)
     
     try:
-        # 检查所有文本文件是否存在
+        # 检查所有文本文件是否存在（跳过直接内容配置）
         for config_item in text_files_config:
-            if not os.path.exists(config_item["file_path"]):
+            if "file_path" in config_item and not os.path.exists(config_item["file_path"]):
                 print(f"错误：文本文件不存在 - {config_item['file_path']}")
                 return False
         
@@ -658,22 +866,34 @@ def input_multiple_files_to_textareas(args, config):
                 print(f"错误：音频文件不存在 - {config_item['file_path']}")
                 return False
         
-        # 读取所有文本文件内容
+        # 读取所有文本文件内容或使用直接指定的内容
         file_contents = {}
         for config_item in text_files_config:
-            print(f"正在读取文本文件: {config_item['file_path']}")
-            content = read_text_file(config_item["file_path"])
-            
-            if content is None:
-                print(f"错误：无法读取文本文件内容 - {config_item['file_path']}")
-                return False
-            
-            file_contents[config_item["textarea_index"]] = content
-            print(f"文本文件大小: {len(content)} 字符")
-            
-            # 显示文件内容的前100个字符
-            preview = content[:100] + "..." if len(content) > 100 else content
-            print(f"文本文件内容预览: {repr(preview)}")
+            # 检查是否是直接内容配置
+            if "content" in config_item:
+                print(f"使用命令行指定的文本内容: {config_item['description']}")
+                content = config_item["content"]
+                file_contents[config_item["textarea_index"]] = content
+                print(f"文本内容大小: {len(content)} 字符")
+                
+                # 显示内容的前100个字符
+                preview = content[:100] + "..." if len(content) > 100 else content
+                print(f"文本内容预览: {repr(preview)}")
+            else:
+                # 从文件读取内容
+                print(f"正在读取文本文件: {config_item['file_path']}")
+                content = read_text_file(config_item["file_path"])
+                
+                if content is None:
+                    print(f"错误：无法读取文本文件内容 - {config_item['file_path']}")
+                    return False
+                
+                file_contents[config_item["textarea_index"]] = content
+                print(f"文本文件大小: {len(content)} 字符")
+                
+                # 显示文件内容的前100个字符
+                preview = content[:100] + "..." if len(content) > 100 else content
+                print(f"文本文件内容预览: {repr(preview)}")
         
         print(f"Textarea选择器: {textarea_selector}")
         print(f"按钮选择器: {button_selector}")
@@ -1002,6 +1222,70 @@ def input_multiple_files_to_textareas(args, config):
         print(f"请确保本地服务正在运行在 {target_url}")
         return False
 
+def run_single_automation(args, base_config, api_params=None, round_number=1):
+    """
+    执行单次自动化操作
+    
+    Args:
+        args: 命令行参数
+        base_config: 基础配置
+        api_params: API参数（可选）
+        round_number: 轮次编号
+    
+    Returns:
+        bool: 是否成功
+    """
+    print(f"\n{'='*80}")
+    print(f"开始第 {round_number} 轮自动化操作")
+    print(f"{'='*80}")
+    
+    # 重新加载配置（使用新的API参数）
+    config = load_config(
+        filename=args.filename, 
+        output_filename=args.output, 
+        content=args.content, 
+        api_params=api_params
+    )
+    
+    if not config:
+        print(f"❌ 第 {round_number} 轮配置加载失败")
+        return False
+    
+    # 显示本轮配置信息
+    text_files = config.get("text_files", [])
+    audio_files = config.get("audio_files", [])
+    temp_directory = config.get("temp_directory", "")
+    
+    print(f"\n第 {round_number} 轮配置信息:")
+    print(f"文本文件数量: {len(text_files)}")
+    for i, text_file in enumerate(text_files, 1):
+        if "file_path" in text_file:
+            print(f"  文本文件{i}: {text_file['file_path']} -> 第{text_file['textarea_index']+1}个textarea")
+        elif "content" in text_file:
+            content_preview = text_file['content'][:50] + "..." if len(text_file['content']) > 50 else text_file['content']
+            print(f"  文本内容{i}: {repr(content_preview)} -> 第{text_file['textarea_index']+1}个textarea")
+    
+    # 清空临时目录
+    if temp_directory:
+        print(f"\n清空临时目录...")
+        if not clear_temp_directory(temp_directory):
+            print("⚠️ 临时目录清空失败，但继续执行后续操作")
+    
+    try:
+        # 执行自动化操作
+        success = input_multiple_files_to_textareas(args, config)
+        
+        if success:
+            print(f"✅ 第 {round_number} 轮自动化操作完成！")
+        else:
+            print(f"❌ 第 {round_number} 轮自动化操作失败！")
+        
+        return success
+        
+    except Exception as e:
+        print(f"❌ 第 {round_number} 轮自动化操作异常: {e}")
+        return False
+
 def main():
     """主函数"""
     # 记录程序启动时间戳
@@ -1012,100 +1296,225 @@ def main():
     
     print("=== 输入文本文件内容到textarea区域并上传音频文件 ===")
     
-    # 加载配置文件
-    config = load_config(filename=args.filename, output_filename=args.output)
-    if not config:
-        print("\n" + "="*60)
-        print("程序启动失败！")
-        print("="*60)
-        print("可能的原因：")
-        print("1. paths.txt文件不存在")
-        print("2. paths.txt中缺少必要的路径配置")
-        print("3. config.json文件格式错误")
-        print("\n解决方案：")
-        print("1. 确保paths.txt文件存在")
-        print("2. 检查paths.txt是否包含以下必要配置：")
-        print("   - text_file_1")
-        print("   - text_file_2") 
-        print("   - audio_file_1")
-        print("   - temp_directory")
-        print("3. 参考paths_linux.txt文件中的示例格式")
-        print("="*60)
-        return
-    
-    # 记录配置加载完成时间戳
-    record_timestamp("配置加载完成")
-    
-    # 显示配置信息
-    text_files = config.get("text_files", [])
-    audio_files = config.get("audio_files", [])
-    temp_directory = config.get("temp_directory", "")
-    monitoring_config = config.get("monitoring", {})
-    browser_config = config.get("browser", {})
-    
-    print("\n配置信息:")
-    print(f"目标URL: {config.get('url', 'http://127.0.0.1:50004/')}")
-    print(f"临时目录: {temp_directory}")
-    print(f"浏览器模式: {'无界面模式' if browser_config.get('headless', False) else '有界面模式'}")
-    print(f"窗口大小: {browser_config.get('window_size', '1920,1080')}")
-    print(f"ChromeDriver路径: {browser_config.get('driver_path', '未指定')}")
-    print(f"监控功能: {'启用' if monitoring_config.get('enabled', True) else '禁用'}")
-    if monitoring_config.get('enabled', True):
-        print(f"扫描间隔: 2秒")
-        print(f"无更新超时: {monitoring_config.get('no_update_timeout', 60)}秒")
-        print(f"最大等待: {monitoring_config.get('max_wait_time', 600)}秒")
-    
-    output_config = config.get("output", {})
-    print(f"输出目录: {output_config.get('directory', 'data')}")
-    print(f"输出文件名: {output_config.get('filename', 'output_audio.wav')}")
-    
-    print(f"文本文件数量: {len(text_files)}")
-    for i, text_file in enumerate(text_files, 1):
-        print(f"  文本文件{i}: {text_file['file_path']} -> 第{text_file['textarea_index']+1}个textarea")
-    
-    print(f"音频文件数量: {len(audio_files)}")
-    for i, audio_file in enumerate(audio_files, 1):
-        print(f"  音频文件{i}: {audio_file['file_path']} -> {audio_file['upload_selector']}")
-    
-    # 清空临时目录
-    if temp_directory:
-        print(f"\n{'='*50}")
-        print("步骤1: 清空临时目录")
-        print(f"{'='*50}")
-        if not clear_temp_directory(temp_directory):
-            print("⚠️ 临时目录清空失败，但继续执行后续操作")
-        print(f"{'='*50}")
-        
-        # 记录临时目录清空完成时间戳
-        record_timestamp("临时目录清空完成")
-    
-    print("\n开始执行自动化操作...\n")
-    
-    try:
-        # 执行自动化操作
-        success = input_multiple_files_to_textareas(args, config)
-        
-        # 记录程序结束时间戳
-        record_timestamp("程序结束")
-        
-        # 打印时间统计摘要
-        print_timing_summary()
-        
-        if success:
-            print("所有自动化操作完成！")
+    # 检查是否启用API循环模式
+    if args.api and args.api_loop:
+        print(f"\n🔄 启用API循环模式")
+        print(f"   检查间隔: {args.api_interval}秒")
+        print(f"   单次最大等待: {args.api_wait}秒")
+        print(f"   快速处理模式: {'启用' if args.api_fast else '禁用'}")
+        if args.api_fast:
+            print(f"   📈 多数据处理: 检测到多条数据时立即连续处理")
         else:
+            print(f"   ⏱️ 多数据处理: 每条数据间固定等待{args.api_interval}秒")
+        print(f"   程序将持续监控API并自动执行操作")
+        print(f"   按 Ctrl+C 可停止程序")
+        
+        # 加载基础配置（不包含API参数）
+        base_config = load_config(filename=args.filename, output_filename=args.output, content=args.content)
+        if not base_config:
+            print("❌ 基础配置加载失败，程序退出")
+            return
+        
+        round_number = 1
+        
+        try:
+            while True:
+                print(f"\n{'='*60}")
+                print(f"等待第 {round_number} 轮API数据...")
+                print(f"{'='*60}")
+                
+                # 获取API参数
+                api_params = fetch_params_from_api(
+                    max_wait_time=args.api_wait, 
+                    check_interval=args.api_interval
+                )
+                
+                if api_params:
+                     # 执行自动化操作
+                     success = run_single_automation(args, base_config, api_params, round_number)
+                     
+                     # 删除已处理的API数据（无论成功失败都删除，避免重复处理）
+                     item_id = api_params.get('id')
+                     if item_id:
+                         delete_success = delete_api_data(item_id)
+                         if not delete_success:
+                             print(f"⚠️ 删除API数据失败，可能导致重复处理")
+                     else:
+                         print(f"⚠️ API数据缺少ID字段，无法删除")
+                     
+                     if success:
+                         print(f"✅ 第 {round_number} 轮操作成功完成")
+                     else:
+                         print(f"⚠️ 第 {round_number} 轮操作失败，但继续监控")
+                     
+                     round_number += 1
+                     
+                     # 根据是否启用快速模式决定处理策略
+                     if args.api_fast:
+                         # 快速模式：立即检查是否还有更多数据
+                         print(f"\n🔍 快速模式：检查是否还有更多待处理数据...")
+                         try:
+                             quick_response = requests.get(f"{API_BASE_URL}/voice/list/", timeout=5)
+                             if quick_response.status_code == 200:
+                                 quick_data = quick_response.json()
+                                 if quick_data.get('status') == 'success':
+                                     remaining_items = quick_data.get('items', [])
+                                     if remaining_items:
+                                         print(f"🚀 发现 {len(remaining_items)} 条待处理数据，立即开始下一轮...")
+                                         continue  # 立即开始下一轮，不等待
+                                     else:
+                                         print(f"✨ 暂无更多数据，等待 {args.api_interval} 秒后继续监控...")
+                                 else:
+                                     print(f"⚠️ 快速检查API状态异常，等待 {args.api_interval} 秒后继续...")
+                             else:
+                                 print(f"⚠️ 快速检查API失败，等待 {args.api_interval} 秒后继续...")
+                         except:
+                             print(f"⚠️ 快速检查API异常，等待 {args.api_interval} 秒后继续...")
+                         
+                         # 如果没有更多数据，等待指定时间
+                         time.sleep(args.api_interval)
+                     else:
+                         # 普通模式：固定等待时间
+                         print(f"\n⏱️ 等待 {args.api_interval} 秒后继续监控...")
+                         time.sleep(args.api_interval)
+                else:
+                    print(f"❌ 第 {round_number} 轮获取API数据失败，等待 {args.api_interval} 秒后重试...")
+                    time.sleep(args.api_interval)
+                    
+        except KeyboardInterrupt:
+            print(f"\n\n🛑 检测到 Ctrl+C，程序停止")
+            print(f"📊 总共完成了 {round_number - 1} 轮自动化操作")
+            
+            # 记录程序结束时间戳
+            record_timestamp("程序结束")
+            print_timing_summary()
+            
+        except Exception as e:
+            print(f"\n❌ API循环模式异常: {e}")
+            
+            # 记录程序结束时间戳
+            record_timestamp("程序结束")
+            print_timing_summary()
+    
+    else:
+        # 单次执行模式（原有逻辑）
+        # 如果指定了API参数，从接口获取参数
+        api_params = None
+        if args.api:
+            api_params = fetch_params_from_api(max_wait_time=args.api_wait, check_interval=args.api_interval)
+            if not api_params:
+                print("⚠️ 从API获取参数失败，将使用其他参数源")
+        
+        # 加载配置文件
+        config = load_config(filename=args.filename, output_filename=args.output, content=args.content, api_params=api_params)
+        if not config:
+            print("\n" + "="*60)
+            print("程序启动失败！")
+            print("="*60)
+            print("可能的原因：")
+            print("1. paths.txt文件不存在")
+            print("2. paths.txt中缺少必要的路径配置")
+            print("3. config.json文件格式错误")
+            print("\n解决方案：")
+            print("1. 确保paths.txt文件存在")
+            print("2. 检查paths.txt是否包含以下必要配置：")
+            print("   - text_file_1")
+            print("   - text_file_2") 
+            print("   - audio_file_1")
+            print("   - temp_directory")
+            print("3. 参考paths_linux.txt文件中的示例格式")
+            print("="*60)
+            return
+        
+        # 记录配置加载完成时间戳
+        record_timestamp("配置加载完成")
+        
+        # 显示配置信息
+        text_files = config.get("text_files", [])
+        audio_files = config.get("audio_files", [])
+        temp_directory = config.get("temp_directory", "")
+        monitoring_config = config.get("monitoring", {})
+        browser_config = config.get("browser", {})
+        
+        print("\n配置信息:")
+        print(f"目标URL: {config.get('url', 'http://127.0.0.1:50004/')}")
+        print(f"临时目录: {temp_directory}")
+        print(f"浏览器模式: {'无界面模式' if browser_config.get('headless', False) else '有界面模式'}")
+        print(f"窗口大小: {browser_config.get('window_size', '1920,1080')}")
+        print(f"ChromeDriver路径: {browser_config.get('driver_path', '未指定')}")
+        print(f"监控功能: {'启用' if monitoring_config.get('enabled', True) else '禁用'}")
+        if monitoring_config.get('enabled', True):
+            print(f"扫描间隔: 2秒")
+            print(f"无更新超时: {monitoring_config.get('no_update_timeout', 60)}秒")
+            print(f"最大等待: {monitoring_config.get('max_wait_time', 600)}秒")
+        
+        output_config = config.get("output", {})
+        print(f"输出目录: {output_config.get('directory', 'data')}")
+        print(f"输出文件名: {output_config.get('filename', 'output_audio.wav')}")
+        
+        print(f"文本文件数量: {len(text_files)}")
+        for i, text_file in enumerate(text_files, 1):
+            if "file_path" in text_file:
+                print(f"  文本文件{i}: {text_file['file_path']} -> 第{text_file['textarea_index']+1}个textarea")
+            elif "content" in text_file:
+                content_preview = text_file['content'][:50] + "..." if len(text_file['content']) > 50 else text_file['content']
+                print(f"  文本内容{i}: {repr(content_preview)} -> 第{text_file['textarea_index']+1}个textarea")
+            else:
+                print(f"  文本配置{i}: {text_file.get('description', '未知')} -> 第{text_file['textarea_index']+1}个textarea")
+        
+        print(f"音频文件数量: {len(audio_files)}")
+        for i, audio_file in enumerate(audio_files, 1):
+            print(f"  音频文件{i}: {audio_file['file_path']} -> {audio_file['upload_selector']}")
+        
+        # 清空临时目录
+        if temp_directory:
+            print(f"\n{'='*50}")
+            print("步骤1: 清空临时目录")
+            print(f"{'='*50}")
+            if not clear_temp_directory(temp_directory):
+                print("⚠️ 临时目录清空失败，但继续执行后续操作")
+            print(f"{'='*50}")
+            
+            # 记录临时目录清空完成时间戳
+            record_timestamp("临时目录清空完成")
+        
+        print("\n开始执行自动化操作...\n")
+        
+        try:
+            # 执行自动化操作
+            success = input_multiple_files_to_textareas(args, config)
+            
+            # 如果使用了API且操作成功，删除已处理的API数据
+            if args.api and api_params and success:
+                item_id = api_params.get('id')
+                if item_id:
+                    delete_success = delete_api_data(item_id)
+                    if not delete_success:
+                        print(f"⚠️ 删除API数据失败")
+                else:
+                    print(f"⚠️ API数据缺少ID字段，无法删除")
+            
+            # 记录程序结束时间戳
+            record_timestamp("程序结束")
+            
+            # 打印时间统计摘要
+            print_timing_summary()
+            
+            if success:
+                print("所有自动化操作完成！")
+            else:
+                print("部分或全部自动化操作失败！")
+        except Exception as e:
+            # 记录程序异常结束时间戳
+            record_timestamp("程序结束")
+            
+            # 打印时间统计摘要
+            print_timing_summary()
+            
+            print(f"程序执行过程中发生异常: {e}")
             print("部分或全部自动化操作失败！")
-    except Exception as e:
-        # 记录程序异常结束时间戳
-        record_timestamp("程序结束")
-        
-        # 打印时间统计摘要
-        print_timing_summary()
-        
-        print(f"程序执行过程中发生异常: {e}")
-        print("部分或全部自动化操作失败！")
 
-def load_config(config_file="config_win.json", filename=None, output_filename=None):
+def load_config(config_file="config_win.json", filename=None, output_filename=None, content=None, api_params=None):
     """
     从config.json文件加载配置，并使用paths.txt中的路径
     
@@ -1113,6 +1522,8 @@ def load_config(config_file="config_win.json", filename=None, output_filename=No
         config_file: 配置文件路径
         filename: 可选的文件名（不含扩展名），用于替换text_file_2和audio_file_1的文件名
         output_filename: 可选的输出文件名（不含扩展名），用于指定最后拷贝的文件名
+        content: 可选的文本内容，直接用于第一个textarea，优先级高于text_file_1
+        api_params: 从API获取的参数字典，优先级最高
     
     Returns:
         配置字典
@@ -1200,6 +1611,92 @@ def load_config(config_file="config_win.json", filename=None, output_filename=No
             new_output_filename = f"{output_filename}{extension}"
             config["output"]["filename"] = new_output_filename
             print(f"  使用指定输出文件名: {new_output_filename}")
+        
+        # 如果指定了API参数，优先使用API参数（优先级最高）
+        if api_params:
+            print("正在使用API参数配置...")
+            
+            # 使用API的content参数
+            api_content = api_params.get('content', '')
+            if api_content:
+                # 确保config中有text_files配置
+                if "text_files" not in config:
+                    config["text_files"] = []
+                
+                # 添加或替换第一个textarea的内容（textarea_index=0，对应content文件）
+                api_content_config = {
+                    "content": api_content,
+                    "textarea_index": 0,
+                    "description": "API接口获取的文本内容"
+                }
+                
+                # 查找是否已有textarea_index=0的配置
+                found_index = -1
+                for i, text_file in enumerate(config["text_files"]):
+                    if text_file.get("textarea_index") == 0:
+                        found_index = i
+                        break
+                
+                if found_index >= 0:
+                    # 替换现有配置
+                    config["text_files"][found_index] = api_content_config
+                    print(f"  使用API内容替换第一个textarea配置（content文件）")
+                else:
+                    # 添加新配置
+                    config["text_files"].append(api_content_config)
+                    print(f"  添加API内容到第一个textarea（content文件）")
+                
+                print(f"  API文本内容长度: {len(api_content)} 字符")
+                # 显示内容预览
+                preview = api_content[:100] + "..." if len(api_content) > 100 else api_content
+                print(f"  API文本内容预览: {repr(preview)}")
+            
+            # 使用API的outfile参数作为输出文件名
+            api_outfile = api_params.get('outfile', '')
+            if api_outfile and not output_filename:  # 只有在没有手动指定输出文件名时才使用API的
+                # 从outfile路径中提取文件名（不含扩展名）
+                api_filename = os.path.splitext(os.path.basename(api_outfile))[0]
+                if api_filename:
+                    output_config = config.get("output", {})
+                    original_filename = output_config.get("filename", "output_audio.wav")
+                    extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+                    new_output_filename = f"{api_filename}{extension}"
+                    config["output"]["filename"] = new_output_filename
+                    print(f"  使用API输出文件名: {new_output_filename}")
+        
+        # 如果指定了content参数，替换第一个textarea的内容（content文件）
+        elif content:
+            # 确保config中有text_files配置
+            if "text_files" not in config:
+                config["text_files"] = []
+            
+            # 添加或替换第一个textarea的内容（textarea_index=0，对应content文件）
+            content_config = {
+                "content": content,
+                "textarea_index": 0,
+                "description": "命令行指定的文本内容（替换content文件）"
+            }
+            
+            # 查找是否已有textarea_index=0的配置
+            found_index = -1
+            for i, text_file in enumerate(config["text_files"]):
+                if text_file.get("textarea_index") == 0:
+                    found_index = i
+                    break
+            
+            if found_index >= 0:
+                # 替换现有配置
+                config["text_files"][found_index] = content_config
+                print(f"  使用命令行指定的文本内容替换第一个textarea配置（content文件）")
+            else:
+                # 添加新配置
+                config["text_files"].append(content_config)
+                print(f"  添加命令行指定的文本内容到第一个textarea（content文件）")
+            
+            print(f"  文本内容长度: {len(content)} 字符")
+            # 显示内容预览
+            preview = content[:100] + "..." if len(content) > 100 else content
+            print(f"  文本内容预览: {repr(preview)}")
         
         return config
         
