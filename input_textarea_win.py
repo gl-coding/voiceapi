@@ -1616,6 +1616,35 @@ def load_config(config_file="config_win.json", filename=None, output_filename=No
         if api_params:
             print("正在使用API参数配置...")
             
+            # 使用API的voice参数替换文件名
+            api_voice = api_params.get('voice', '')
+            if api_voice:
+                print(f"  使用API的voice参数作为文件名: {api_voice}")
+                
+                # 替换文本文件2的文件名
+                if "text_file_2" in paths and len(config.get("text_files", [])) > 1:
+                    text_file_2_path = paths["text_file_2"]
+                    directory = os.path.dirname(text_file_2_path)
+                    original_filename = os.path.basename(text_file_2_path)
+                    extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+                    new_filename = f"{api_voice}{extension}"
+                    text_file_2_path = os.path.join(directory, new_filename)
+                    config["text_files"][1]["file_path"] = text_file_2_path
+                    print(f"  使用API voice参数替换text_file_2: {new_filename}")
+                    print(f"  文本文件2新路径: {text_file_2_path}")
+                
+                # 替换音频文件1的文件名
+                if "audio_file_1" in paths and len(config.get("audio_files", [])) > 0:
+                    audio_file_1_path = paths["audio_file_1"]
+                    directory = os.path.dirname(audio_file_1_path)
+                    original_filename = os.path.basename(audio_file_1_path)
+                    extension = os.path.splitext(original_filename)[1]  # 保留原扩展名
+                    new_filename = f"{api_voice}{extension}"
+                    audio_file_1_path = os.path.join(directory, new_filename)
+                    config["audio_files"][0]["file_path"] = audio_file_1_path
+                    print(f"  使用API voice参数替换audio_file_1: {new_filename}")
+                    print(f"  音频文件1新路径: {audio_file_1_path}")
+            
             # 使用API的content参数
             api_content = api_params.get('content', '')
             if api_content:
