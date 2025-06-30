@@ -50,5 +50,14 @@
         "element_wait": 5,
         "button_interval": 1,
         "observe_time": 5
+    },
+    "upload": {
+        "enabled": true,
+        "server_url": "http://39.105.213.3",
+        "folder_id": 4,
+        "timeout": 60,
+        "delete_after_upload": true,
+        "retry_count": 3,
+        "retry_delay": 2
     }
 } 
