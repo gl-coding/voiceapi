@@ -1,1 +1,1 @@
-python input_textarea_win.py -f dushunan -o shanhe
+python input_textarea_win.py -a --api-loop --api-fast

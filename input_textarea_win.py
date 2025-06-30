@@ -1762,6 +1762,15 @@ def create_default_config(config_file="config.json"):
             "element_wait": 10,
             "button_interval": 2,
             "observe_time": 15
+        },
+        "upload": {
+            "enabled": True,
+            "server_url": "http://39.105.213.3",
+            "folder_id": 4,
+            "timeout": 60,
+            "delete_after_upload": True,
+            "retry_count": 3,
+            "retry_delay": 2
         }
     }
     
@@ -1839,9 +1848,148 @@ def clear_temp_directory(temp_dir):
         print(f"✗ 清空临时目录失败: {e}")
         return False
 
+def upload_file_to_server(file_path, description="Generated audio file", config=None):
+    """
+    将文件上传到服务器
+    
+    Args:
+        file_path: 要上传的文件路径
+        description: 文件描述
+        config: 配置字典（可选）
+    
+    Returns:
+        bool: 是否上传成功
+    """
+    # 从配置文件读取服务器配置，如果没有配置则使用默认值
+    if config:
+        upload_config = config.get("upload", {})
+        url_base = upload_config.get("server_url", "http://39.105.213.3")
+        folder_id = upload_config.get("folder_id", 4)
+        timeout = upload_config.get("timeout", 60)
+        retry_count = upload_config.get("retry_count", 3)
+        retry_delay = upload_config.get("retry_delay", 2)
+    else:
+        # 默认配置（参考upload.py）
+        url_base = 'http://39.105.213.3'
+        folder_id = 4
+        timeout = 60
+        retry_count = 3
+        retry_delay = 2
+    
+    upload_url = url_base + '/api/upload/'
+    
+    print(f"\n开始上传文件到服务器...")
+    print(f"文件路径: {file_path}")
+    print(f"服务器地址: {url_base}")
+    print(f"文件描述: {description}")
+    print(f"文件夹ID: {folder_id}")
+    print(f"重试次数: {retry_count}")
+    
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        print(f"❌ 文件不存在: {file_path}")
+        return False
+    
+    # 获取文件信息
+    file_size = os.path.getsize(file_path)
+    print(f"文件大小: {file_size} 字节")
+    
+    # 重试上传
+    for attempt in range(retry_count + 1):
+        try:
+            if attempt > 0:
+                print(f"\n第 {attempt + 1} 次尝试上传...")
+                time.sleep(retry_delay)  # 重试前等待
+            else:
+                print(f"\n正在上传文件...")
+            
+            print(f"超时时间: {timeout}秒")
+            
+            # 上传文件
+            with open(file_path, 'rb') as f:
+                files = {'file': f}
+                data = {
+                    'description': description,
+                    'folder': folder_id  # 文件夹ID，从配置文件读取
+                }
+                
+                # 设置请求会话以优化连接
+                session = requests.Session()
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                
+                response = session.post(
+                    upload_url, 
+                    files=files, 
+                    data=data, 
+                    timeout=timeout,
+                    stream=False  # 禁用流式传输以避免ChunkedEncodingError
+                )
+                
+                print(f"上传响应状态码: {response.status_code}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"上传响应: {json.dumps(result, ensure_ascii=False, indent=2)}")
+                    print("✅ 文件上传成功！")
+                    return True
+                else:
+                    print(f"❌ 文件上传失败，状态码: {response.status_code}")
+                    try:
+                        error_info = response.json()
+                        print(f"错误信息: {json.dumps(error_info, ensure_ascii=False, indent=2)}")
+                    except:
+                        print(f"错误信息: {response.text}")
+                    
+                    # 如果是最后一次尝试，返回失败
+                    if attempt == retry_count:
+                        return False
+                    else:
+                        print(f"将在 {retry_delay} 秒后重试...")
+                        continue
+                        
+        except requests.exceptions.ChunkedEncodingError as e:
+            print(f"❌ 分块编码错误（第{attempt + 1}次尝试）: {e}")
+            if attempt == retry_count:
+                print("❌ 所有重试都失败，可能是网络连接不稳定")
+                return False
+            else:
+                print(f"将在 {retry_delay} 秒后重试...")
+                continue
+                
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ 连接错误（第{attempt + 1}次尝试）: {e}")
+            if attempt == retry_count:
+                print("❌ 无法连接到服务器")
+                return False
+            else:
+                print(f"将在 {retry_delay} 秒后重试...")
+                continue
+                
+        except requests.exceptions.Timeout as e:
+            print(f"❌ 上传超时（第{attempt + 1}次尝试）: {e}")
+            if attempt == retry_count:
+                print("❌ 文件上传超时")
+                return False
+            else:
+                print(f"将在 {retry_delay} 秒后重试...")
+                continue
+                
+        except Exception as e:
+            print(f"❌ 上传异常（第{attempt + 1}次尝试）: {e}")
+            if attempt == retry_count:
+                print("❌ 文件上传失败")
+                return False
+            else:
+                print(f"将在 {retry_delay} 秒后重试...")
+                continue
+    
+    return False
+
 def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_wait_time=600):
     """
-    监控临时目录，检测新文件生成并拷贝到指定目录
+    监控临时目录，检测新文件生成并拷贝到指定目录，然后上传到服务器
     
     Args:
         temp_dir: 临时目录路径
@@ -1850,7 +1998,7 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
         max_wait_time: 最大等待时间（秒），默认600秒（10分钟）
     
     Returns:
-        bool: 是否成功拷贝文件
+        bool: 是否成功拷贝和上传文件
     """
     print(f"\n开始监控临时目录: {temp_dir}")
     print(f"扫描间隔: 2秒")
@@ -2011,6 +2159,44 @@ def monitor_temp_directory_and_copy(temp_dir, config, monitor_interval=60, max_w
             print("✓ 文件大小验证成功")
         else:
             print("⚠️ 文件大小不匹配，可能拷贝不完整")
+        
+        # 上传文件到服务器
+        upload_config = config.get("upload", {})
+        upload_enabled = upload_config.get("enabled", True)  # 默认启用上传
+        
+        if upload_enabled:
+            print(f"\n{'='*50}")
+            print("开始上传文件到服务器")
+            print(f"{'='*50}")
+            
+            # 生成文件描述
+            file_description = f"Generated audio file: {output_filename}"
+            
+            # 上传文件
+            upload_success = upload_file_to_server(dest_path, file_description, config)
+            
+            if upload_success:
+                print("✅ 文件上传到服务器成功！")
+                
+                # 检查是否需要删除本地文件
+                delete_after_upload = upload_config.get("delete_after_upload", False)
+                if delete_after_upload:
+                    try:
+                        print(f"正在删除本地文件: {dest_path}")
+                        os.remove(dest_path)
+                        print("✅ 本地文件删除成功！")
+                    except Exception as e:
+                        print(f"⚠️ 删除本地文件失败: {e}")
+                else:
+                    print("ℹ️ 本地文件保留（配置文件设置）")
+            else:
+                print("❌ 文件上传到服务器失败！")
+                print("ℹ️ 由于上传失败，保留本地文件")
+                # 即使上传失败，也不影响整体流程的成功状态
+            
+            print(f"{'='*50}")
+        else:
+            print("⚠️ 文件上传功能已禁用（配置文件设置）")
         
         return True
         

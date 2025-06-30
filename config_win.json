@@ -43,7 +43,7 @@
     "monitoring": {
         "enabled": true,
         "no_update_timeout": 60,
-        "max_wait_time": 300
+        "max_wait_time": 3000
     },
     "timeouts": {
         "page_load": 2,
