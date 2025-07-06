@@ -339,6 +339,8 @@ def parse_arguments():
   python input_textarea.py -a --api-interval 2     # 从API获取参数，每2秒检查一次
   python input_textarea.py -f filename -o output   # 同时指定输入和输出文件名
   python input_textarea.py -c "内容" -o output     # 指定文本内容和输出文件名
+  python input_textarea.py --headless              # 使用无界面模式运行浏览器（覆盖配置文件）
+  python input_textarea.py --no-headless           # 使用有界面模式运行浏览器（覆盖配置文件）
   python input_textarea.py -h                      # 显示帮助信息
 
 参数优先级: -a (API) > -c (直接内容) > -f (文件名) > 配置文件
@@ -394,6 +396,18 @@ def parse_arguments():
         '--api-fast',
         action='store_true',
         help='启用快速处理模式，当有多条数据时立即处理下一条，无需等待间隔时间'
+    )
+    
+    parser.add_argument(
+        '--headless',
+        action='store_true',
+        help='使用无界面模式运行浏览器，覆盖配置文件中的设置'
+    )
+    
+    parser.add_argument(
+        '--no-headless',
+        action='store_true',
+        help='使用有界面模式运行浏览器，覆盖配置文件中的设置'
     )
     
     return parser.parse_args()
@@ -904,6 +918,14 @@ def input_multiple_files_to_textareas(args, config):
         headless_mode = browser_config.get("headless", False)
         window_size = browser_config.get("window_size", "1920,1080")
         
+        # 检查命令行参数是否覆盖配置文件设置
+        if args.headless:
+            headless_mode = True
+            print("✓ 已启用无界面模式（从命令行参数覆盖）")
+        elif args.no_headless:
+            headless_mode = False
+            print("✓ 已启用有界面模式（从命令行参数覆盖）")
+        
         # 配置Chrome选项
         chrome_options = Options()
         
@@ -913,9 +935,11 @@ def input_multiple_files_to_textareas(args, config):
         # 设置无界面模式
         if headless_mode:
             chrome_options.add_argument("--headless")
-            print("✓ 已启用无界面模式（从配置文件读取）")
+            if not args.headless:
+                print("✓ 已启用无界面模式（从配置文件读取）")
         else:
-            print("✓ 使用有界面模式（从配置文件读取）")
+            if not args.no_headless:
+                print("✓ 使用有界面模式（从配置文件读取）")
         
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
