@@ -1036,7 +1036,7 @@ def input_multiple_files_to_textareas(args, config):
         print(f"{'='*50}")
         
         # 点击指定按钮
-        print("\n正在查找并点击指定按钮...")
+        print("\n正在查找指定按钮...")
         
         try:
             # 等待按钮出现
@@ -1052,35 +1052,67 @@ def input_multiple_files_to_textareas(args, config):
             print(f"按钮大小: {button.size}")
             print(f"按钮文本: {button.text}")
             
-            # 点击第一个按钮
-            print("正在点击第一个按钮...")
-            button.click()
-            print("✓ 第一个按钮点击成功！")
+            # 跳过第一个按钮点击
+            print("✓ 根据配置，跳过第一个按钮点击")
             
-            # 等待一下，然后点击第二个相同样式的按钮
-            time.sleep(button_interval_timeout)
+            # 直接查找第二个相同样式的按钮
             print("正在查找第二个相同样式的按钮...")
+            
+            # 读取按钮点击配置
+            buttons_config = config.get("buttons", {})
+            click_first_button = buttons_config.get("click_first_button", False)
+            click_second_button = buttons_config.get("click_second_button", True)
             
             # 查找所有相同样式的按钮
             all_buttons = driver.find_elements(By.CSS_SELECTOR, button_selector)
-            if len(all_buttons) >= 2:
-                second_button = all_buttons[1]  # 第二个按钮
+            
+            # 处理第一个按钮
+            if click_first_button and len(all_buttons) >= 1:
+                first_button = all_buttons[0]  # 第一个按钮
                 
-                # 滚动到第二个按钮位置
-                driver.execute_script("arguments[0].scrollIntoView(true);", second_button)
+                # 滚动到第一个按钮位置
+                driver.execute_script("arguments[0].scrollIntoView(true);", first_button)
                 time.sleep(1)
                 
-                # 显示第二个按钮信息
-                print(f"第二个按钮位置: {second_button.location}")
-                print(f"第二个按钮大小: {second_button.size}")
-                print(f"第二个按钮文本: {second_button.text}")
+                # 显示第一个按钮信息
+                print(f"第一个按钮位置: {first_button.location}")
+                print(f"第一个按钮大小: {first_button.size}")
+                print(f"第一个按钮文本: {first_button.text}")
                 
-                # 点击第二个按钮
-                print("正在点击第二个按钮...")
-                second_button.click()
-                print("✓ 第二个按钮点击成功！")
+                # 点击第一个按钮
+                print("正在点击第一个按钮...")
+                first_button.click()
+                print("✓ 第一个按钮点击成功！")
+                
+                # 等待按钮间隔时间
+                time.sleep(button_interval_timeout)
+            elif not click_first_button:
+                print("⚠️ 根据配置，跳过第一个按钮点击")
             else:
-                print(f"⚠️ 只找到 {len(all_buttons)} 个按钮，无法点击第二个按钮")
+                print(f"⚠️ 未找到第一个按钮，无法点击")
+            
+            # 处理第二个按钮
+            if click_second_button:
+                if len(all_buttons) >= 2:
+                    second_button = all_buttons[1]  # 第二个按钮
+                    
+                    # 滚动到第二个按钮位置
+                    driver.execute_script("arguments[0].scrollIntoView(true);", second_button)
+                    time.sleep(1)
+                    
+                    # 显示第二个按钮信息
+                    print(f"第二个按钮位置: {second_button.location}")
+                    print(f"第二个按钮大小: {second_button.size}")
+                    print(f"第二个按钮文本: {second_button.text}")
+                    
+                    # 点击第二个按钮
+                    print("正在点击第二个按钮...")
+                    second_button.click()
+                    print("✓ 第二个按钮点击成功！")
+                else:
+                    print(f"⚠️ 只找到 {len(all_buttons)} 个按钮，无法点击第二个按钮")
+            else:
+                print("⚠️ 根据配置，跳过第二个按钮点击")
             
         except Exception as e:
             print(f"✗ 点击按钮失败: {e}")
@@ -1099,6 +1131,11 @@ def input_multiple_files_to_textareas(args, config):
                 "[class*='svelte-cmf5ev']"
             ]
             
+            # 读取按钮点击配置
+            buttons_config = config.get("buttons", {})
+            click_first_button = buttons_config.get("click_first_button", False)
+            click_second_button = buttons_config.get("click_second_button", True)
+            
             button_clicked = False
             for selector in possible_button_selectors:
                 try:
@@ -1106,22 +1143,30 @@ def input_multiple_files_to_textareas(args, config):
                     if len(elements) >= 2:
                         print(f"找到 {len(elements)} 个可能的按钮: {selector}")
                         
-                        # 点击第一个按钮
-                        first_button = elements[0]
-                        print(f"第一个按钮文本: {first_button.text}")
-                        driver.execute_script("arguments[0].scrollIntoView(true);", first_button)
-                        time.sleep(1)
-                        first_button.click()
-                        print(f"✓ 使用选择器 {selector} 点击第一个按钮成功！")
+                        # 处理第一个按钮
+                        if click_first_button:
+                            first_button = elements[0]
+                            print(f"第一个按钮文本: {first_button.text}")
+                            driver.execute_script("arguments[0].scrollIntoView(true);", first_button)
+                            time.sleep(1)
+                            first_button.click()
+                            print(f"✓ 使用选择器 {selector} 点击第一个按钮成功！")
+                            
+                            # 等待按钮间隔时间
+                            time.sleep(button_interval_timeout)
+                        else:
+                            print("⚠️ 根据配置，跳过第一个按钮点击")
                         
-                        # 等待一下，然后点击第二个按钮
-                        time.sleep(button_interval_timeout)
-                        second_button = elements[1]
-                        print(f"第二个按钮文本: {second_button.text}")
-                        driver.execute_script("arguments[0].scrollIntoView(true);", second_button)
-                        time.sleep(1)
-                        second_button.click()
-                        print(f"✓ 使用选择器 {selector} 点击第二个按钮成功！")
+                        # 处理第二个按钮
+                        if click_second_button:
+                            second_button = elements[1]
+                            print(f"第二个按钮文本: {second_button.text}")
+                            driver.execute_script("arguments[0].scrollIntoView(true);", second_button)
+                            time.sleep(1)
+                            second_button.click()
+                            print(f"✓ 使用选择器 {selector} 点击第二个按钮成功！")
+                        else:
+                            print("⚠️ 根据配置，跳过第二个按钮点击")
                         
                         button_clicked = True
                         break
@@ -1134,9 +1179,14 @@ def input_multiple_files_to_textareas(args, config):
                         driver.execute_script("arguments[0].scrollIntoView(true);", button)
                         time.sleep(1)
                         
-                        # 点击按钮
-                        button.click()
-                        print(f"✓ 使用选择器 {selector} 点击按钮成功！")
+                        # 根据配置决定是否点击
+                        if click_first_button:
+                            # 点击按钮
+                            button.click()
+                            print(f"✓ 使用选择器 {selector} 点击按钮成功！")
+                        else:
+                            print("⚠️ 根据配置，跳过按钮点击")
+                        
                         print("⚠️ 只找到一个按钮，无法点击第二个按钮")
                         button_clicked = True
                         break
@@ -1791,6 +1841,10 @@ def create_default_config(config_file="config.json"):
             "element_wait": 10,
             "button_interval": 2,
             "observe_time": 15
+        },
+        "buttons": {
+            "click_first_button": False,
+            "click_second_button": True
         },
         "upload": {
             "enabled": True,
